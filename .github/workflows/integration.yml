@@ -1,0 +1,44 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'run' to create real AWS resources (DB instance!)."
+        required: true
+      kms_key_arn:
+        description: "KMS key ARN for storage encryption."
+        required: true
+      db_subnet_group_name:
+        description: "Existing DB subnet group name."
+        required: true
+      vpc_security_group_id:
+        description: "Existing VPC security group ID."
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  integration:
+    name: terraform test (integration)
+    if: github.event.inputs.confirm == 'run'
+    runs-on: ubuntu-latest
+    environment: sandbox
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.5" }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ap-south-1
+      - run: terraform init
+      - name: terraform test (integration)
+        env:
+          TF_VAR_kms_key_arn: ${{ inputs.kms_key_arn }}
+          TF_VAR_db_subnet_group_name: ${{ inputs.db_subnet_group_name }}
+          TF_VAR_vpc_security_group_ids: '["${{ inputs.vpc_security_group_id }}"]'
+        run: terraform test -filter=tests/integration.tftest.hcl

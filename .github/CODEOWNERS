@@ -1,0 +1,20 @@
+# CODEOWNERS for terraform-aws-rds
+#
+# This module manages a stateful, encryption-bearing AWS resource that
+# typically holds transactional fintech data. Changes here shape the
+# security perimeter and recovery posture of every consumer.
+#
+# Per Module-Repo Plan v1.3 §16 governance.
+
+# Default: every change requires both teams to approve.
+*                          @devotica-labs/cloud-leads @devotica-labs/security
+
+# Security-primary: anything that touches encryption, IAM, or the
+# auth/networking surface.
+/main.tf                   @devotica-labs/security @devotica-labs/cloud-leads
+/data.tf                   @devotica-labs/security @devotica-labs/cloud-leads
+/variables.tf              @devotica-labs/security @devotica-labs/cloud-leads
+
+# CI/CD pipelines.
+/.github/                  @devotica-labs/cloud-leads @devotica-labs/security
+/.github/workflows/        @devotica-labs/cloud-leads @devotica-labs/security

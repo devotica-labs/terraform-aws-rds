@@ -158,7 +158,243 @@ storage_throughput = 1000
 - Releases are cut by `release-please` on Conventional Commits. Each release is keyless-signed via cosign and ships a CycloneDX SBOM.
 
 <!-- BEGIN_TF_DOCS -->
-<!-- terraform-docs will inject the inputs/outputs/resources tables here on the next CI run -->
+
+
+## Usage
+
+### Basic
+
+```hcl
+# ---------------------------------------------------------------------------
+# Provider block — CI-friendly skip flags + non-AWS-shaped placeholder creds.
+# ---------------------------------------------------------------------------
+provider "aws" {
+  region                      = "ap-south-1"
+  access_key                  = "not-a-real-aws-key"
+  secret_key                  = "not-a-real-aws-secret"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+}
+
+# Uses local path during development.
+# Change to Registry source after first release:
+#   source  = "devotica-labs/rds/aws"
+#   version = "~> 0.1"
+
+module "rds" {
+  source = "../.."
+
+  identifier     = "my-app-db"
+  engine         = "postgres"
+  engine_version = "16.4"
+  instance_class = "db.t4g.medium"
+
+  allocated_storage     = 20
+  max_allocated_storage = 100
+
+  # KMS key for storage encryption — required. Typically from
+  # devotica-labs/terraform-aws-kms.
+  kms_key_arn = "arn:aws:kms:ap-south-1:123456789012:key/00000000-0000-0000-0000-000000000000"
+
+  # Networking — caller-supplied. Subnet group must span at least two AZs.
+  db_subnet_group_name   = "my-vpc-private-db"
+  vpc_security_group_ids = ["sg-00000000000000000"]
+
+  db_name = "myapp"
+
+  # Defaults already cover the fintech baseline: multi_az on, 7-day backups,
+  # deletion_protection on, IAM auth on, perf insights on, AWS-managed
+  # master password.
+
+  tags = {
+    Environment = "example"
+    Project     = "terraform-aws-rds"
+    Owner       = "platform@devotica.com"
+    CostCenter  = "PLATFORM-OSS"
+    ManagedBy   = "Terraform"
+    Repo        = "https://github.com/devotica-labs/terraform-aws-rds"
+  }
+}
+```
+
+### Complete
+
+```hcl
+# ---------------------------------------------------------------------------
+# Provider block — CI-friendly skip flags + non-AWS-shaped placeholder creds.
+# ---------------------------------------------------------------------------
+provider "aws" {
+  region                      = "ap-south-1"
+  access_key                  = "not-a-real-aws-key"
+  secret_key                  = "not-a-real-aws-secret"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+}
+
+# Uses local path during development.
+# Change to Registry source after first release:
+#   source  = "devotica-labs/rds/aws"
+#   version = "~> 0.1"
+
+module "rds" {
+  source = "../.."
+
+  identifier     = "devotica-prod-payments"
+  engine         = "postgres"
+  engine_version = "16.4"
+  instance_class = "db.m7g.large"
+
+  # Storage with autoscaling headroom.
+  allocated_storage     = 100
+  max_allocated_storage = 500
+  storage_type          = "gp3"
+  iops                  = 12000
+  storage_throughput    = 500
+
+  # Workload KMS key (typically from devotica-labs/terraform-aws-kms).
+  kms_key_arn = "arn:aws:kms:ap-south-1:111122223333:key/00000000-0000-0000-0000-000000000000"
+
+  # AWS-managed master password — default. Caller doesn't see the secret.
+  # The KMS key the secret is encrypted under defaults to kms_key_arn.
+  manage_master_user_password = true
+
+  # Database
+  db_name  = "payments"
+  username = "payments_admin"
+
+  # Networking
+  db_subnet_group_name   = "devotica-prod-private-db"
+  vpc_security_group_ids = ["sg-0aaaaaaaaaaaaaaaa", "sg-0bbbbbbbbbbbbbbbb"]
+  port                   = 5432
+
+  # HA + backups (fintech defaults are already on; restating for the example)
+  multi_az                         = true
+  backup_retention_period          = 35
+  backup_window                    = "18:00-19:00"
+  copy_tags_to_snapshot            = true
+  deletion_protection              = true
+  skip_final_snapshot              = false
+  final_snapshot_identifier_prefix = "final"
+
+  # Maintenance
+  maintenance_window         = "sun:19:00-sun:20:00"
+  auto_minor_version_upgrade = true
+  apply_immediately          = false
+
+  # Monitoring — Enhanced + PI both on for prod
+  monitoring_interval                   = 60
+  performance_insights_enabled          = true
+  performance_insights_retention_period = 31
+
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
+  # Auth
+  iam_database_authentication_enabled = true
+
+  # Custom parameter group — Postgres tuning
+  parameter_group_family = "postgres16"
+  parameters = [
+    { name = "log_min_duration_statement", value = "1000" },
+    { name = "log_connections", value = "1" },
+    { name = "log_disconnections", value = "1" },
+    { name = "pg_stat_statements.track", value = "ALL" },
+    # shared_preload_libraries requires pending-reboot apply
+    { name = "shared_preload_libraries", value = "pg_stat_statements", apply_method = "pending-reboot" },
+  ]
+
+  tags = {
+    Environment = "production"
+    Project     = "payments"
+    Owner       = "data-platform@devotica.com"
+    CostCenter  = "PAYMENTS"
+    ManagedBy   = "Terraform"
+    Repo        = "https://github.com/devotica-labs/terraform-aws-rds"
+  }
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 6.44 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_aws"></a> [aws](#provider\_aws) | ~> 6.44 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.6 |
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_db_instance.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance) | resource |
+| [aws_db_parameter_group.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_parameter_group) | resource |
+| [aws_iam_role.enhanced_monitoring](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy_attachment.enhanced_monitoring](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [random_id.final_snapshot_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_db_subnet_group_name"></a> [db\_subnet\_group\_name](#input\_db\_subnet\_group\_name) | Name of an existing DB subnet group (caller-supplied). The subnet group's subnets must be in at least two AZs. | `string` | n/a | yes |
+| <a name="input_identifier"></a> [identifier](#input\_identifier) | DB instance identifier. Globally unique within the account/region. Used for the resource name and (when manage\_master\_user\_password = true) the AWS-managed secret's path. | `string` | n/a | yes |
+| <a name="input_instance_class"></a> [instance\_class](#input\_instance\_class) | RDS instance class (e.g. db.t4g.medium for dev, db.m7g.large for prod). See AWS docs for the full list. | `string` | n/a | yes |
+| <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the KMS key used to encrypt storage. Required — no plaintext RDS in fintech. Typically the output of devotica-labs/terraform-aws-kms. | `string` | n/a | yes |
+| <a name="input_vpc_security_group_ids"></a> [vpc\_security\_group\_ids](#input\_vpc\_security\_group\_ids) | Security group IDs attached to the DB instance. Caller is responsible for the SG ingress / egress rules (typically: TCP from app SGs only). | `list(string)` | n/a | yes |
+| <a name="input_allocated_storage"></a> [allocated\_storage](#input\_allocated\_storage) | Allocated storage in GB. Minimum 20 (Postgres) / 20 (MySQL). | `number` | `20` | no |
+| <a name="input_apply_immediately"></a> [apply\_immediately](#input\_apply\_immediately) | Apply pending modifications immediately instead of during the next maintenance window. False by default — apply-immediately causes downtime. | `bool` | `false` | no |
+| <a name="input_auto_minor_version_upgrade"></a> [auto\_minor\_version\_upgrade](#input\_auto\_minor\_version\_upgrade) | Apply minor-version engine upgrades automatically during maintenance windows. True by default — minor versions are backwards-compatible and contain CVE fixes. | `bool` | `true` | no |
+| <a name="input_backup_retention_period"></a> [backup\_retention\_period](#input\_backup\_retention\_period) | Days to retain automated backups. RBI / SEBI mandate at least 7; many fintechs go to 35 (the AWS max) for transaction-audit needs. | `number` | `7` | no |
+| <a name="input_backup_window"></a> [backup\_window](#input\_backup\_window) | Preferred UTC backup window (hh24:mi-hh24:mi). Pick a low-traffic window. Default is 18:00-19:00 UTC (23:30-00:30 IST). | `string` | `"18:00-19:00"` | no |
+| <a name="input_copy_tags_to_snapshot"></a> [copy\_tags\_to\_snapshot](#input\_copy\_tags\_to\_snapshot) | Whether automated backups inherit instance tags. Recommended — the tag set is how cost allocation + DR runbooks identify backups. | `bool` | `true` | no |
+| <a name="input_db_name"></a> [db\_name](#input\_db\_name) | Name of the initial database to create. Empty string skips the create-database step. | `string` | `""` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Block `terraform destroy` and AWS-console delete on this instance. True by default for fintech (the cost of accidental deletion >>> the friction of toggling this off before a planned teardown). | `bool` | `true` | no |
+| <a name="input_enabled_cloudwatch_logs_exports"></a> [enabled\_cloudwatch\_logs\_exports](#input\_enabled\_cloudwatch\_logs\_exports) | List of log types to export to CloudWatch Logs. Per engine: postgres → ["postgresql", "upgrade"]; mysql → ["audit", "error", "general", "slowquery"]. | `list(string)` | `[]` | no |
+| <a name="input_engine"></a> [engine](#input\_engine) | Database engine. Supported in v0.1: postgres, mysql. (Aurora variants live in a sister module — single-instance Aurora is an antipattern.) | `string` | `"postgres"` | no |
+| <a name="input_engine_version"></a> [engine\_version](#input\_engine\_version) | Engine major.minor (e.g. "16.4" for Postgres, "8.0.39" for MySQL). Must match a version AWS currently supports for the engine. Leave to the module default to track Postgres 16 LTS; pin explicitly in prod. | `string` | `"16.4"` | no |
+| <a name="input_final_snapshot_identifier_prefix"></a> [final\_snapshot\_identifier\_prefix](#input\_final\_snapshot\_identifier\_prefix) | Prefix for the final snapshot name. The actual snapshot will be `<prefix>-<identifier>-<timestamp>`. Ignored when skip\_final\_snapshot = true. | `string` | `"final"` | no |
+| <a name="input_iam_database_authentication_enabled"></a> [iam\_database\_authentication\_enabled](#input\_iam\_database\_authentication\_enabled) | Allow IAM principals to log in via temporary auth tokens (passwordless). On by default — pairs well with terraform-aws-iam roles + per-environment access. | `bool` | `true` | no |
+| <a name="input_iops"></a> [iops](#input\_iops) | Provisioned IOPS. Only meaningful for io1/io2/gp3 (when gp3 is above baseline). 0 lets AWS pick the gp3 baseline. | `number` | `0` | no |
+| <a name="input_maintenance_window"></a> [maintenance\_window](#input\_maintenance\_window) | Preferred UTC weekly maintenance window (ddd:hh24:mi-ddd:hh24:mi). Pick a window distinct from backup\_window. Default Sunday 19:00-20:00 UTC. | `string` | `"sun:19:00-sun:20:00"` | no |
+| <a name="input_manage_master_user_password"></a> [manage\_master\_user\_password](#input\_manage\_master\_user\_password) | Let AWS RDS create and manage the master password in AWS Secrets Manager (with automatic rotation). Strongly recommended. When false, you must pass master\_password. | `bool` | `true` | no |
+| <a name="input_master_password"></a> [master\_password](#input\_master\_password) | Master password. Only used when manage\_master\_user\_password = false. Pass via a sensitive variable; never commit. Empty string when AWS-managed (default). | `string` | `""` | no |
+| <a name="input_master_user_secret_kms_key_arn"></a> [master\_user\_secret\_kms\_key\_arn](#input\_master\_user\_secret\_kms\_key\_arn) | KMS key ARN that AWS Secrets Manager uses to encrypt the AWS-managed master password secret. Defaults to var.kms\_key\_arn (same workload key). | `string` | `""` | no |
+| <a name="input_max_allocated_storage"></a> [max\_allocated\_storage](#input\_max\_allocated\_storage) | Upper bound for storage autoscaling (GB). Set to 0 to disable autoscaling. Recommend at least 2x allocated\_storage in prod so the autoscaler has headroom. | `number` | `100` | no |
+| <a name="input_monitoring_interval"></a> [monitoring\_interval](#input\_monitoring\_interval) | Enhanced Monitoring polling interval in seconds (0, 1, 5, 10, 15, 30, 60). 0 disables. 60 is a sensible prod default. | `number` | `0` | no |
+| <a name="input_multi_az"></a> [multi\_az](#input\_multi\_az) | Enable Multi-AZ deployment (synchronous standby in a second AZ). True by default — production cost, but losing a primary mid-transaction without failover is the worst-case scenario in fintech. | `bool` | `true` | no |
+| <a name="input_parameter_group_family"></a> [parameter\_group\_family](#input\_parameter\_group\_family) | DB parameter group family (e.g. "postgres16", "mysql8.0"). Leave empty to skip the custom parameter group and use the AWS default. | `string` | `""` | no |
+| <a name="input_parameters"></a> [parameters](#input\_parameters) | Custom DB parameters as a list of {name, value, apply\_method} objects. Ignored when parameter\_group\_family is empty. | <pre>list(object({<br/>    name         = string<br/>    value        = string<br/>    apply_method = optional(string, "immediate")<br/>  }))</pre> | `[]` | no |
+| <a name="input_performance_insights_enabled"></a> [performance\_insights\_enabled](#input\_performance\_insights\_enabled) | Enable Performance Insights. True by default — free tier covers 7-day retention; longer retention costs more. | `bool` | `true` | no |
+| <a name="input_performance_insights_kms_key_arn"></a> [performance\_insights\_kms\_key\_arn](#input\_performance\_insights\_kms\_key\_arn) | KMS key for Performance Insights data. Defaults to var.kms\_key\_arn (same workload key). | `string` | `""` | no |
+| <a name="input_performance_insights_retention_period"></a> [performance\_insights\_retention\_period](#input\_performance\_insights\_retention\_period) | Performance Insights retention in days. 7 is free; 731 (~2 years) is the long-term option for audit. | `number` | `7` | no |
+| <a name="input_port"></a> [port](#input\_port) | Port the DB listens on. Defaults to the engine default (Postgres 5432, MySQL/MariaDB 3306). | `number` | `0` | no |
+| <a name="input_publicly_accessible"></a> [publicly\_accessible](#input\_publicly\_accessible) | Whether the DB is reachable on a public IP. NEVER true in fintech prod — should always be false. Validation refuses true. | `bool` | `false` | no |
+| <a name="input_skip_final_snapshot"></a> [skip\_final\_snapshot](#input\_skip\_final\_snapshot) | Skip the final snapshot when this instance is destroyed. Default false — fintech wants a snapshot in case the deletion was a mistake. | `bool` | `false` | no |
+| <a name="input_storage_throughput"></a> [storage\_throughput](#input\_storage\_throughput) | Storage throughput (MiB/s). Only meaningful for gp3. 0 = AWS default. | `number` | `0` | no |
+| <a name="input_storage_type"></a> [storage\_type](#input\_storage\_type) | Storage type. gp3 is the modern default (cheaper + better IOPS curve than gp2). | `string` | `"gp3"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Additional tags merged onto every taggable resource. | `map(string)` | `{}` | no |
+| <a name="input_username"></a> [username](#input\_username) | Master DB username. Cannot be changed after creation. | `string` | `"dbadmin"` | no |
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_db_instance_address"></a> [db\_instance\_address](#output\_db\_instance\_address) | Hostname of the RDS instance (without port). |
+| <a name="output_db_instance_arn"></a> [db\_instance\_arn](#output\_db\_instance\_arn) | ARN of the RDS instance. |
+| <a name="output_db_instance_endpoint"></a> [db\_instance\_endpoint](#output\_db\_instance\_endpoint) | Connection endpoint in host:port form. |
+| <a name="output_db_instance_id"></a> [db\_instance\_id](#output\_db\_instance\_id) | RDS instance identifier (e.g. "devotica-prod-payments"). |
+| <a name="output_db_instance_name"></a> [db\_instance\_name](#output\_db\_instance\_name) | Name of the initial database created. Empty string when var.db\_name was unset. |
+| <a name="output_db_instance_port"></a> [db\_instance\_port](#output\_db\_instance\_port) | Port the RDS instance listens on. |
+| <a name="output_db_instance_resource_id"></a> [db\_instance\_resource\_id](#output\_db\_instance\_resource\_id) | Immutable RDS resource ID (dbi-...). Used in IAM database-auth policy conditions and in CloudWatch resource ARNs. |
+| <a name="output_db_instance_username"></a> [db\_instance\_username](#output\_db\_instance\_username) | Master username (defaults to "dbadmin"). |
+| <a name="output_enhanced_monitoring_role_arn"></a> [enhanced\_monitoring\_role\_arn](#output\_enhanced\_monitoring\_role\_arn) | ARN of the enhanced-monitoring IAM role. Empty string when monitoring\_interval = 0. |
+| <a name="output_final_snapshot_identifier"></a> [final\_snapshot\_identifier](#output\_final\_snapshot\_identifier) | Identifier of the final snapshot that would be taken on destroy. Empty string when skip\_final\_snapshot = true. |
+| <a name="output_master_user_secret_arn"></a> [master\_user\_secret\_arn](#output\_master\_user\_secret\_arn) | ARN of the AWS-managed Secrets Manager secret holding the master password. Empty string when manage\_master\_user\_password = false. |
+| <a name="output_parameter_group_name"></a> [parameter\_group\_name](#output\_parameter\_group\_name) | Name of the parameter group attached to the instance. Empty string when using the AWS default. |
 <!-- END_TF_DOCS -->
 
 ## License

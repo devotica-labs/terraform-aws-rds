@@ -8,6 +8,18 @@ Releases are cut automatically by `release-please` on merge to `main`,
 driven by Conventional Commit prefixes (`feat:` → minor, `fix:`/`docs:`/`chore:` → patch,
 `feat!:` or `BREAKING CHANGE:` footer → major).
 
+## 0.1.0 (2026-06-15)
+
+
+### Features
+
+* initial terraform-aws-rds module ([836756e](https://github.com/devotica-labs/terraform-aws-rds/commit/836756ec75b36cde5cda16ce77e613cfc09b1a99))
+
+
+### Bug Fixes
+
+* **tflint:** reference var.publicly_accessible in aws_db_instance ([6d04ed4](https://github.com/devotica-labs/terraform-aws-rds/commit/6d04ed4fa9b1ceb86e1d336b71a79a2a55024ff0))
+
 ## [Unreleased]
 
 ### Added

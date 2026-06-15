@@ -102,7 +102,7 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name   = var.db_subnet_group_name
   vpc_security_group_ids = var.vpc_security_group_ids
   port                   = local.effective_port
-  publicly_accessible    = false # validated; module refuses true
+  publicly_accessible    = var.publicly_accessible # validation refuses anything but false
 
   # HA
   multi_az = var.multi_az

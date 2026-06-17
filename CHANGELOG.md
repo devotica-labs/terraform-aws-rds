@@ -8,6 +8,13 @@ Releases are cut automatically by `release-please` on merge to `main`,
 driven by Conventional Commit prefixes (`feat:` → minor, `fix:`/`docs:`/`chore:` → patch,
 `feat!:` or `BREAKING CHANGE:` footer → major).
 
+## [0.1.1](https://github.com/devotica-labs/terraform-aws-rds/compare/v0.1.0...v0.1.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **release:** replace dead CycloneDX action with anchore/sbom-action ([#6](https://github.com/devotica-labs/terraform-aws-rds/issues/6)) ([a5cc012](https://github.com/devotica-labs/terraform-aws-rds/commit/a5cc012cb254efbfeb445dcf0f1ad7fdf45f95be))
+
 ## 0.1.0 (2026-06-15)
 
 
